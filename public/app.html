@@ -438,7 +438,7 @@
                 document.querySelector('#agentC .content').innerHTML = marked.parse(resC.content);
                 // Restore chat context
                 contextHistory = [
-                    { role: 'system', content: '你是一个雅思写作助手。用户刚刚提交了一篇文章并获得了反馈。请回答用户关于反馈的任何后续问题。' },
+                    { role: 'system', content: '你是一个雅思写作助手，请务必全程使用中文回复。用户刚刚提交了一篇文章并获得了反馈。请用中文回答用户关于反馈的任何后续问题。' },
                     { role: 'user', content: `Topic: ${session.topic}\nEssay: ${session.essay}` },
                     { role: 'assistant', content: resC.content }
                 ];
@@ -534,7 +534,7 @@
                 document.querySelector('#agentC .content').innerHTML = marked.parse(data.resC);
 
                 contextHistory = [
-                    { role: 'system', content: '你是一个雅思写作助手。用户刚刚提交了一篇文章并获得了反馈。请回答用户关于反馈的任何后续问题。' },
+                    { role: 'system', content: '你是一个雅思写作助手，请务必全程使用中文回复。用户刚刚提交了一篇文章并获得了反馈。请用中文回答用户关于反馈的任何后续问题。' },
                     { role: 'user', content: `Topic: ${topic}\nEssay: ${essay}` },
                     { role: 'assistant', content: data.resC }
                 ];
