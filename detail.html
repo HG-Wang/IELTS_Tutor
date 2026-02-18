@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雅思多智能体评审系统 - 详情页</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        /* 详情页容器：模拟淘宝详情页宽度 */
+        .detail-container {
+            width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 截图占位符样式 */
+        .placeholder-box {
+            border: 3px dashed #cbd5e1;
+            background-color: #f8fafc;
+            color: #94a3b8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+            border-radius: 0.5rem;
+            transition: all 0.3s;
+        }
+
+        .placeholder-box:hover {
+            border-color: #6366f1;
+            color: #6366f1;
+            background-color: #eef2ff;
+        }
+
+        .gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 装饰性背景 */
+        .tech-grid {
+            background-image: radial-gradient(#e0e7ff 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="detail-container">
+
+        <header
+            class="bg-gradient-to-br from-indigo-900 via-blue-800 to-indigo-900 text-white p-12 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                <i class="fa-solid fa-code text-9xl absolute -top-10 -left-10"></i>
+                <i class="fa-solid fa-robot text-9xl absolute -bottom-10 -right-10"></i>
+            </div>
+
+            <div class="relative z-10">
+                <div
+                    class="inline-block bg-indigo-500 bg-opacity-30 border border-indigo-400 rounded-full px-4 py-1 text-sm mb-4 tracking-wider">
+                    顶尖大模型（Kimi K2.5） 驱动
+                </div>
+                <h1 class="text-5xl font-black mb-4 leading-tight">
+                    雅思写作<br>
+                    <span class="text-yellow-400">多智能体</span>评审系统
+                </h1>
+                <p class="text-xl text-indigo-100 font-light">
+                    Multi-Agent IELTS Reviewer
+                </p>
+                <div class="mt-8 flex justify-center gap-8">
+                    <div class="text-center">
+                        <div class="text-3xl font-bold text-yellow-400">3位</div>
+                        <div class="text-xs opacity-75">AI考官辩论</div>
+                    </div>
+                    <div class="w-px bg-indigo-500"></div>
+                    <div class="text-center">
+                        <div class="text-3xl font-bold text-yellow-400">4项</div>
+                        <div class="text-xs opacity-75">全维度评分</div>
+                    </div>
+                    <div class="w-px bg-indigo-500"></div>
+                    <div class="text-center">
+                        <div class="text-3xl font-bold text-yellow-400">10分钟</div>
+                        <div class="text-xs opacity-75">极速出分</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <section class="py-12 px-10 bg-white">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-10">
+                普通 AI 批改<span class="text-red-500">太水了</span>？
+            </h2>
+            <div class="grid grid-cols-3 gap-6">
+                <div class="bg-red-50 p-6 rounded-xl text-center">
+                    <div
+                        class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-xl">
+                        <i class="fa-solid fa-face-dizzy"></i>
+                    </div>
+                    <h3 class="font-bold text-gray-800 mb-2">只会夸你</h3>
+                    <p class="text-sm text-gray-600">永远都是 "Good job"，根本不知道逻辑漏洞在哪里，考场上照样 5.5 分。</p>
+                </div>
+                <div class="bg-red-50 p-6 rounded-xl text-center">
+                    <div
+                        class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-xl">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </div>
+                    <h3 class="font-bold text-gray-800 mb-2">人工太贵</h3>
+                    <p class="text-sm text-gray-600">找前考官批改，一篇就要 ¥80+，考前练 20 篇就要吃土了。</p>
+                </div>
+                <div class="bg-red-50 p-6 rounded-xl text-center">
+                    <div
+                        class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-xl">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                    </div>
+                    <h3 class="font-bold text-gray-800 mb-2">等待漫长</h3>
+                    <p class="text-sm text-gray-600">发给老师要等隔天才能回，写作手感早就凉了，效率极低。</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-12 px-10 bg-indigo-50 tech-grid border-y border-indigo-100">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-gray-800">
+                    <span
+                        class="bg-gradient-to-r from-blue-600 to-indigo-600 gradient-text text-transparent">Multi-Agent</span>
+                    评审黑科技
+                </h2>
+                <p class="text-gray-600 mt-2">我们不只是调用 API，我们构建了一个评审委员会</p>
+            </div>
+
+            <div class="space-y-6">
+                <div class="flex items-center gap-6 bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500">
+                    <div
+                        class="w-16 h-16 bg-blue-100 rounded-full flex-shrink-0 flex items-center justify-center text-blue-600 text-2xl">
+                        <i class="fa-solid fa-glasses"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg text-gray-800">Agent A: Grammar Guru (语法严谨派)</h3>
+                        <p class="text-sm text-gray-600 mt-1">
+                            <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold mr-2">GRA</span>
+                            <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">LR</span>
+                        </p>
+                        <p class="text-sm text-gray-500 mt-2">专攻词汇语法，极其挑剔。哪怕一个介词用错，也会被它揪出来严厉批评。拒绝中式英语！</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-6 bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500">
+                    <div
+                        class="w-16 h-16 bg-orange-100 rounded-full flex-shrink-0 flex items-center justify-center text-orange-600 text-2xl">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg text-gray-800">Agent B: Logic Master (逻辑思维派)</h3>
+                        <p class="text-sm text-gray-600 mt-1">
+                            <span
+                                class="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-xs font-bold mr-2">TR</span>
+                            <span class="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-xs font-bold">CC</span>
+                        </p>
+                        <p class="text-sm text-gray-500 mt-2">忽略小错误，只看逻辑链条。如果你跑题了，或者论证不充分，它会毫不留情地指出。</p>
+                    </div>
+                </div>
+
+                <div
+                    class="flex items-center gap-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-xl shadow-lg transform scale-105">
+                    <div
+                        class="w-16 h-16 bg-white/20 rounded-full flex-shrink-0 flex items-center justify-center text-white text-2xl">
+                        <i class="fa-solid fa-gavel"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg">Agent C: Chief Examiner (主考官)</h3>
+                        <p class="text-xs text-indigo-100 mt-1">综合裁决 · 最终给分 · 范文重写</p>
+                        <p class="text-sm text-indigo-100 mt-2 opacity-90">听取 A 和 B 的辩论，平衡语法与逻辑，给出最接近官方标准的 Band Score。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-12 px-10 bg-white">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="bg-indigo-600 text-white w-8 h-8 rounded flex items-center justify-center font-bold">1</div>
+                <h2 class="text-xl font-bold text-gray-800">Round 1 & 2: 深度分析与辩论</h2>
+            </div>
+            <p class="text-gray-600 text-sm mb-4">你看，语法考官和逻辑考官正在为了你的文章“吵架”。真理越辩越明！</p>
+
+            <div class="placeholder-box h-80">
+                <i class="fa-solid fa-image text-4xl mb-4"></i>
+                <p class="font-bold">在此处放入【软件界面截图】</p>
+                <p class="text-xs mt-2">建议展示：两个 Agent (A和B) 的分析卡片以及下方的 Debate 对话气泡</p>
+                <p class="text-xs text-gray-400 mt-1">(替换 html 中的 placeholder-box div 为 img 标签)</p>
+            </div>
+        </section>
+
+        <section class="py-12 px-10 bg-gray-50">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="bg-indigo-600 text-white w-8 h-8 rounded flex items-center justify-center font-bold">2</div>
+                <h2 class="text-xl font-bold text-gray-800">Round 3: 最终评分与范文</h2>
+            </div>
+            <p class="text-gray-600 text-sm mb-4">主考官会根据你的原意，为你重写一篇 8.0+ 的范文，并逐句解析。</p>
+
+            <div class="placeholder-box h-96">
+                <i class="fa-solid fa-file-pen text-4xl mb-4"></i>
+                <p class="font-bold">在此处放入【最终报告截图】</p>
+                <p class="text-xs mt-2">建议展示：Chief Examiner 的评分表格和 Revised Essay 部分</p>
+            </div>
+        </section>
+
+        <section class="py-12 px-10 bg-white">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-10">为什么选择源码版？</h2>
+
+            <div class="grid grid-cols-2 gap-8">
+                <div class="flex gap-4">
+                    <i class="fa-solid fa-shield-halved text-green-500 text-2xl mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">绝对隐私安全</h4>
+                        <p class="text-sm text-gray-600 mt-1">HTML 本地运行，你的文章直接发送至 OpenAI，不经过任何第三方中转服务器。</p>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <i class="fa-solid fa-infinity text-indigo-500 text-2xl mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">一次购买，无限使用</h4>
+                        <p class="text-sm text-gray-600 mt-1">没有月费，没有次数限制。只要你有 Key，想批改多少篇都可以。</p>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <i class="fa-brands fa-chrome text-blue-500 text-2xl mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">无需安装</h4>
+                        <p class="text-sm text-gray-600 mt-1">就是一个 HTML 文件。双击直接在 Chrome/Edge 浏览器打开，即刻开始。</p>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <i class="fa-solid fa-comments text-orange-500 text-2xl mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">考官互动问答</h4>
+                        <p class="text-sm text-gray-600 mt-1">不仅是批改，还能聊天。对修改意见有疑问？直接在对话框里怼考官！</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-12 px-10 bg-gray-900 text-white">
+            <h2 class="text-2xl font-bold text-center mb-8">性价比之选</h2>
+            <div class="flex justify-center items-end gap-4 text-center">
+                <div class="bg-gray-800 p-6 rounded-lg w-1/3 opacity-70">
+                    <h4 class="font-bold text-gray-400 mb-2">真人外教</h4>
+                    <div class="text-2xl font-bold mb-2">¥80<span class="text-sm font-normal">/篇</span></div>
+                    <ul class="text-sm text-gray-400 space-y-2 text-left px-2">
+                        <li><i class="fa-solid fa-xmark text-red-500 mr-2"></i>极贵</li>
+                        <li><i class="fa-solid fa-xmark text-red-500 mr-2"></i>要等24h</li>
+                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i>质量好</li>
+                    </ul>
+                </div>
+
+                <div
+                    class="bg-indigo-600 p-8 rounded-xl w-1/3 shadow-2xl relative transform scale-110 z-10 border-2 border-yellow-400">
+                    <div
+                        class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-black text-xs font-bold px-3 py-1 rounded-full">
+                        店长推荐
+                    </div>
+                    <h4 class="font-bold text-white mb-2">本源码工具</h4>
+                    <div class="text-4xl font-bold mb-2 text-yellow-300">¥19.9<span
+                            class="text-sm font-normal text-white">/永久</span></div>
+                    <ul class="text-sm text-indigo-100 space-y-3 text-left px-2 mt-4">
+                        <li><i class="fa-solid fa-check text-yellow-300 mr-2"></i>秒级出分</li>
+                        <li><i class="fa-solid fa-check text-yellow-300 mr-2"></i>多维度精批</li>
+                        <li><i class="fa-solid fa-check text-yellow-300 mr-2"></i>无限次使用</li>
+                    </ul>
+                </div>
+
+                <div class="bg-gray-800 p-6 rounded-lg w-1/3 opacity-70">
+                    <h4 class="font-bold text-gray-400 mb-2">普通 AI</h4>
+                    <div class="text-2xl font-bold mb-2">免费</div>
+                    <ul class="text-sm text-gray-400 space-y-2 text-left px-2">
+                        <li><i class="fa-solid fa-check text-green-500 mr-2"></i>快</li>
+                        <li><i class="fa-solid fa-xmark text-red-500 mr-2"></i>逻辑太泛</li>
+                        <li><i class="fa-solid fa-xmark text-red-500 mr-2"></i>无法打分</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="py-10 px-10 bg-gray-50 text-xs text-gray-500 leading-relaxed border-t border-gray-200">
+            <h3 class="font-bold text-gray-700 mb-2 text-sm">⚠️ 购买前必读：</h3>
+            <ol class="list-decimal pl-4 space-y-1">
+                <li>本商品为虚拟资源（HTML源码文件），发货后不支持退款。</li>
+                <li>工具需要配合 **API Key** 使用（支持 OpenAI 官方 Key 或 OpenRouter 等中转 Key）。</li>
+                <li>本商品**不包含** API Key，如果您没有 Key，请咨询客服获取低价获取渠道。</li>
+                <li>支持电脑端和手机端浏览器运行，建议使用 Chrome 或 Edge 以获得最佳体验。</li>
+            </ol>
+        </section>
+
+        <footer class="bg-indigo-900 text-white py-8 text-center">
+            <p class="mb-4 text-indigo-200">Early Access 特惠中</p>
+            <div class="inline-block border-2 border-white px-8 py-3 text-xl font-bold tracking-widest uppercase">
+                立即下单 自动发货
+            </div>
+        </footer>
+
+    </div>
+
+</body>
+
+</html>
