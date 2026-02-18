@@ -485,6 +485,8 @@
         }
 
         // ── Review ────────────────────────────────────────────────────────────────
+        let pollingTimer = null;
+
         async function startReview() {
             const topic = document.getElementById('topic').value.trim();
             const essay = document.getElementById('essay').value.trim();
@@ -507,60 +509,131 @@
             document.getElementById('chatSection').style.transform = 'translateY(100%)';
 
             const btn = document.getElementById('submitBtn');
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在多轮评审中...';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 提交中...';
             btn.disabled = true;
 
-            document.querySelector('#agentA .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Round 1: Analyzing Grammar & Vocabulary...';
-            document.querySelector('#agentB .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Round 1: Analyzing Logic & Coherence...';
+            document.querySelector('#agentA .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Round 1: 语法与词汇分析中...';
+            document.querySelector('#agentB .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i>Round 1: 逻辑与连贯分析中...';
             document.querySelector('#agentC .content').innerHTML = '';
 
             try {
+                // Submit review — returns immediately with job_id
                 const res = await fetch('/api/review', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: currentSessionId, topic, essay })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || '批改失败');
+                if (!res.ok) throw new Error(data.error || '提交失败');
 
-                document.querySelector('#agentA .content').innerHTML = marked.parse(data.resA);
-                document.querySelector('#agentB .content').innerHTML = marked.parse(data.resB);
+                const jobId = data.job_id;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 后台评审中，可离开页面...';
 
-                document.getElementById('committeeDiscussion').classList.remove('hidden');
-                addDebateMessage('A', data.critiqueA);
-                addDebateMessage('B', data.critiqueB);
+                // Poll for result
+                await pollJob(jobId, topic, essay);
 
-                document.getElementById('agentC').classList.remove('hidden');
-                document.querySelector('#agentC .content').innerHTML = marked.parse(data.resC);
-
-                contextHistory = [
-                    { role: 'system', content: '你是一个雅思写作助手，请务必全程使用中文回复。用户刚刚提交了一篇文章并获得了反馈。请用中文回答用户关于反馈的任何后续问题。' },
-                    { role: 'user', content: `Topic: ${topic}\nEssay: ${essay}` },
-                    { role: 'assistant', content: data.resC }
-                ];
-                document.getElementById('chatSection').style.transform = 'translateY(0)';
-
-                // Refresh usage info
-                const meRes = await fetch('/api/me');
-                if (meRes.ok) {
-                    currentUser = await meRes.json();
-                    if (currentUser.max_reviews !== -1) {
-                        const remaining = currentUser.max_reviews - currentUser.used_reviews;
-                        document.getElementById('usageText').textContent = `剩余批改次数：${remaining}/${currentUser.max_reviews}`;
-                    }
-                }
-
-                loadSessions();
             } catch (e) {
                 alert('错误：' + e.message);
                 document.querySelector('#agentA .content').innerHTML = '';
                 document.querySelector('#agentB .content').innerHTML = '';
-            } finally {
                 btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
                 btn.disabled = false;
-                document.getElementById('processArea').scrollTo({ top: document.getElementById('processArea').scrollHeight, behavior: 'smooth' });
             }
         }
+
+        async function pollJob(jobId, topic, essay) {
+            const btn = document.getElementById('submitBtn');
+            const stages = [
+                '⏳ Round 1: 两位考官独立分析中...',
+                '💬 Round 2: 考官辩论交叉审查中...',
+                '⚖️ Round 3: 主考官综合裁决中...'
+            ];
+            let pollCount = 0;
+            let stopped = false;
+
+            return new Promise((resolve) => {
+                async function doPoll() {
+                    if (stopped) return;
+
+                    pollCount++;
+                    const stageIdx = Math.min(Math.floor(pollCount / 5), stages.length - 1);
+                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[stageIdx]}`;
+
+                    try {
+                        const res = await fetch(`/api/jobs/${jobId}`);
+                        const data = await res.json();
+
+                        if (stopped) return; // Another call may have resolved already
+
+                        if (data.status === 'done') {
+                            stopped = true;
+                            displayReviewResult(data.result, topic, essay);
+                            resolve();
+                        } else if (data.status === 'error') {
+                            stopped = true;
+                            alert('批改失败：' + data.error);
+                            btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
+                            btn.disabled = false;
+                            resolve();
+                        } else if (data.status === 'not_found') {
+                            stopped = true;
+                            // Server restarted — load result from DB
+                            await loadSession(currentSessionId);
+                            btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
+                            btn.disabled = false;
+                            resolve();
+                        } else {
+                            // Still pending — schedule next poll
+                            pollingTimer = setTimeout(doPoll, 2000);
+                        }
+                    } catch (e) {
+                        // Network error — retry after delay
+                        if (!stopped) pollingTimer = setTimeout(doPoll, 3000);
+                    }
+                }
+
+                // Start first poll after 2s
+                pollingTimer = setTimeout(doPoll, 2000);
+            });
+        }
+
+
+        function displayReviewResult(result, topic, essay) {
+            const { resA, resB, critiqueA, critiqueB, resC } = result;
+            const btn = document.getElementById('submitBtn');
+
+            document.querySelector('#agentA .content').innerHTML = marked.parse(resA);
+            document.querySelector('#agentB .content').innerHTML = marked.parse(resB);
+
+            document.getElementById('committeeDiscussion').classList.remove('hidden');
+            addDebateMessage('A', critiqueA);
+            addDebateMessage('B', critiqueB);
+
+            document.getElementById('agentC').classList.remove('hidden');
+            document.querySelector('#agentC .content').innerHTML = marked.parse(resC);
+
+            contextHistory = [
+                { role: 'system', content: '你是一个雅思写作助手，请务必全程使用中文回复。用户刚刚提交了一篇文章并获得了反馈。请用中文回答用户关于反馈的任何后续问题。' },
+                { role: 'user', content: `Topic: ${topic}\nEssay: ${essay}` },
+                { role: 'assistant', content: resC }
+            ];
+            document.getElementById('chatSection').style.transform = 'translateY(0)';
+
+            // Refresh usage info
+            fetch('/api/me').then(r => r.json()).then(user => {
+                currentUser = user;
+                if (user.max_reviews !== -1) {
+                    const remaining = user.max_reviews - user.used_reviews;
+                    document.getElementById('usageText').textContent = `剩余批改次数：${remaining}/${user.max_reviews}`;
+                }
+            });
+
+            btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
+            btn.disabled = false;
+            loadSessions();
+            document.getElementById('processArea').scrollTo({ top: document.getElementById('processArea').scrollHeight, behavior: 'smooth' });
+        }
+
 
         // ── Debate Bubble ─────────────────────────────────────────────────────────
         function addDebateMessage(agent, content) {

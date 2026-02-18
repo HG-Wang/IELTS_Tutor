@@ -330,60 +330,20 @@ async function callAI(systemPrompt, userContent, cfg) {
   });
 }
 
-// ─── Review API ───────────────────────────────────────────────────────────────
-const PROMPTS = {
-  A_Analysis: `你是一位极其严苛的雅思语法考官（Grammar Guru）。请务必全程使用中文回复。你的任务是只关注【词汇(LR)】和【语法(GRA)】。
-1. 找出所有语法错误（时态、单复数、从句错误等），引用原文错误句，并给出中文解释和修正建议。
-2. 指出中式英语（Chinglish）表达，并提供地道替换，用中文说明原因。
-3. 严厉批评词汇重复或低级的问题。
-不要写总结，直接列出错误点和修正建议。所有分析说明必须用中文书写。`,
+// ─── Background Job Queue ─────────────────────────────────────────────────────
+// Jobs are stored in memory. They survive page navigation but not server restarts.
+// Results are always persisted to DB, so history works even after restart.
+const jobs = new Map(); // jobId -> { status, userId, sessionId, result, error, createdAt }
 
-  B_Analysis: `你是一位雅思逻辑思维导师（Logic Master）。请务必全程使用中文回复。你的任务是忽略小语法错误，只关注【任务回应(TR)】和【连贯衔接(CC)】。
-1. 论点是否切题？有没有跑题？用中文详细说明。
-2. 论证是否充分？逻辑链条是否断裂？指出具体段落并用中文解释。
-3. 段落连接词是否自然？给出中文改进建议。
-如果逻辑不通，请直言不讳。所有分析说明必须用中文书写。`,
-
-  A_Critique: `你现在进入了委员会辩论环节。请务必全程使用中文回复。针对逻辑导师（Logic Master）的反馈，你有什么补充或反对意见？
-1. 考生的语法错误是否严重到了影响逻辑表达？
-2. 逻辑导师是否漏掉了因语言晦涩导致的逻辑不清？
-请简短回应（150字以内），开头用"致逻辑导师："，全程用中文。`,
-
-  B_Critique: `你现在进入了委员会辩论环节。请务必全程使用中文回复。针对语法考官（Grammar Guru）的反馈，你有什么补充或反对意见？
-1. 语法考官是否过于吹毛求疵，忽略了内容的深度？
-2. 某些被认为"错误"的表达在特定语境下是否可接受？
-请简短回应（150字以内），开头用"致语法考官："，全程用中文。`,
-
-  C_Final: `你是一位资深雅思主考官。请务必全程使用中文回复，包括所有分析、评语和说明（范文本身保留英文）。你的任务是阅读考官A和B的第一轮分析，以及他们的第二轮辩论，最后给出一份完整的最终报告。
-1. 用中文总结A和B的观点，并判定谁在辩论中更有理。
-2. 给出【详细评分表】（TR、CC、LR、GRA 四项分及总分），并用中文说明每项扣分原因。
-3. 综合修改意见，给出一篇优化后的英文范文，并在范文后附上中文点评说明主要改动要点。
-语气要专业、权威且富有鼓励性，使用Markdown格式。`
-};
-
-
-app.post('/api/review', requireAuth, async (req, res) => {
-  const { session_id, topic, essay } = req.body;
-  if (!essay) return res.status(400).json({ error: '请提供作文内容' });
-
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
-
-  // Check subscription
-  if (!user.is_admin && user.subscription_end) {
-    if (new Date() > new Date(user.subscription_end)) {
-      return res.status(403).json({ error: '您的订阅已过期，请联系管理员续期' });
-    }
+// Clean up old completed jobs after 30 minutes to avoid memory leaks
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, job] of jobs) {
+    if (job.status !== 'pending' && job.createdAt < cutoff) jobs.delete(id);
   }
+}, 5 * 60 * 1000);
 
-  // Check review count
-  if (!user.is_admin && user.max_reviews !== -1 && user.used_reviews >= user.max_reviews) {
-    return res.status(403).json({ error: `批改次数已用完（${user.used_reviews}/${user.max_reviews}），请联系管理员` });
-  }
-
-  // Verify session belongs to user
-  const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(session_id, user.id);
-  if (!session) return res.status(404).json({ error: '会话不存在' });
-
+async function runReviewJob(jobId, userId, session_id, topic, essay) {
   const cfg = getAIConfig();
   const userInput = `Topic: ${topic || '(未提供题目)'}\n\nEssay: ${essay}`;
 
@@ -418,34 +378,137 @@ Please provide the final verdict, scores, and revised essay.
 
     const resC = await callAI(PROMPTS.C_Final, synthesisInput, cfg);
 
-    // Save to DB
+    // Save to DB (atomic transaction)
     const saveMsg = db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)");
-    const saveMany = db.transaction(() => {
+    db.transaction(() => {
+      // Clear any previous messages for this session before saving new ones
+      db.prepare("DELETE FROM messages WHERE session_id = ? AND role IN ('agentA','agentB','critiqueA','critiqueB','agentC')").run(session_id);
       saveMsg.run(uuidv4(), session_id, 'agentA', resA);
       saveMsg.run(uuidv4(), session_id, 'agentB', resB);
       saveMsg.run(uuidv4(), session_id, 'critiqueA', critiqueA);
       saveMsg.run(uuidv4(), session_id, 'critiqueB', critiqueB);
       saveMsg.run(uuidv4(), session_id, 'agentC', resC);
-    });
-    saveMany();
+    })();
 
     // Update session info
     const title = (topic || essay).slice(0, 40) + '...';
     db.prepare("UPDATE sessions SET topic = ?, essay = ?, title = ?, status = 'done', updated_at = datetime('now') WHERE id = ?")
       .run(topic || '', essay, title, session_id);
 
-    // Increment used_reviews
-    if (!user.is_admin) {
-      db.prepare("UPDATE users SET used_reviews = used_reviews + 1 WHERE id = ?").run(user.id);
+    // Increment used_reviews (only for non-admins)
+    const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
+    if (user && !user.is_admin) {
+      db.prepare("UPDATE users SET used_reviews = used_reviews + 1 WHERE id = ?").run(userId);
     }
 
-    res.json({ resA, resB, critiqueA, critiqueB, resC });
+    // Update job status
+    if (jobs.has(jobId)) {
+      jobs.get(jobId).status = 'done';
+      jobs.get(jobId).result = { resA, resB, critiqueA, critiqueB, resC };
+    }
 
   } catch (e) {
-    console.error('Review error:', e);
-    res.status(500).json({ error: e.message });
+    console.error('Review job error:', e);
+    db.prepare("UPDATE sessions SET status = 'error', updated_at = datetime('now') WHERE id = ?").run(session_id);
+    if (jobs.has(jobId)) {
+      jobs.get(jobId).status = 'error';
+      jobs.get(jobId).error = e.message;
+    }
   }
+}
+
+app.post('/api/review', requireAuth, (req, res) => {
+  const { session_id, topic, essay } = req.body;
+  if (!essay) return res.status(400).json({ error: '请提供作文内容' });
+
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+
+  // Check subscription
+  if (!user.is_admin && user.subscription_end) {
+    if (new Date() > new Date(user.subscription_end)) {
+      return res.status(403).json({ error: '您的订阅已过期，请联系管理员续期' });
+    }
+  }
+
+  // Check review count
+  if (!user.is_admin && user.max_reviews !== -1 && user.used_reviews >= user.max_reviews) {
+    return res.status(403).json({ error: `批改次数已用完（${user.used_reviews}/${user.max_reviews}），请联系管理员` });
+  }
+
+  // Verify session belongs to user
+  const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(session_id, user.id);
+  if (!session) return res.status(404).json({ error: '会话不存在' });
+
+  // Mark session as processing
+  db.prepare("UPDATE sessions SET topic = ?, essay = ?, status = 'processing', updated_at = datetime('now') WHERE id = ?")
+    .run(topic || '', essay, session_id);
+
+  // Create job and start background processing
+  const jobId = uuidv4();
+  jobs.set(jobId, { status: 'pending', userId: user.id, sessionId: session_id, result: null, error: null, createdAt: Date.now() });
+
+  // Fire and forget — runs independently of this HTTP request
+  runReviewJob(jobId, user.id, session_id, topic, essay);
+
+  // Return immediately with job ID
+  res.json({ job_id: jobId, session_id });
 });
+
+// Poll job status
+app.get('/api/jobs/:id', requireAuth, (req, res) => {
+  const job = jobs.get(req.params.id);
+
+  // Job not in memory (server restarted?) — try to read result from DB
+  if (!job) {
+    // We don't know which session this job was for, so just return not found
+    // The frontend should fall back to loading the session directly
+    return res.json({ status: 'not_found' });
+  }
+
+  // Security: only the job owner can poll it
+  if (job.userId !== req.user.id) return res.status(403).json({ error: '无权访问' });
+
+  if (job.status === 'done') {
+    return res.json({ status: 'done', result: job.result });
+  }
+  if (job.status === 'error') {
+    return res.json({ status: 'error', error: job.error });
+  }
+  res.json({ status: 'pending' });
+});
+
+// ─── Prompts ──────────────────────────────────────────────────────────────────
+const PROMPTS = {
+  A_Analysis: `你是一位极其严苛的雅思语法考官（Grammar Guru）。请务必全程使用中文回复。你的任务是只关注【词汇(LR)】和【语法(GRA)】。
+1. 找出所有语法错误（时态、单复数、从句错误等），引用原文错误句，并给出中文解释和修正建议。
+2. 指出中式英语（Chinglish）表达，并提供地道替换，用中文说明原因。
+3. 严厉批评词汇重复或低级的问题。
+不要写总结，直接列出错误点和修正建议。所有分析说明必须用中文书写。`,
+
+  B_Analysis: `你是一位雅思逻辑思维导师（Logic Master）。请务必全程使用中文回复。你的任务是忽略小语法错误，只关注【任务回应(TR)】和【连贯衔接(CC)】。
+1. 论点是否切题？有没有跑题？用中文详细说明。
+2. 论证是否充分？逻辑链条是否断裂？指出具体段落并用中文解释。
+3. 段落连接词是否自然？给出中文改进建议。
+如果逻辑不通，请直言不讳。所有分析说明必须用中文书写。`,
+
+  A_Critique: `你现在进入了委员会辩论环节。请务必全程使用中文回复。针对逻辑导师（Logic Master）的反馈，你有什么补充或反对意见？
+1. 考生的语法错误是否严重到了影响逻辑表达？
+2. 逻辑导师是否漏掉了因语言晦涩导致的逻辑不清？
+请简短回应（150字以内），开头用"致逻辑导师："，全程用中文。`,
+
+  B_Critique: `你现在进入了委员会辩论环节。请务必全程使用中文回复。针对语法考官（Grammar Guru）的反馈，你有什么补充或反对意见？
+1. 语法考官是否过于吹毛求疵，忽略了内容的深度？
+2. 某些被认为"错误"的表达在特定语境下是否可接受？
+请简短回应（150字以内），开头用"致语法考官："，全程用中文。`,
+
+  C_Final: `你是一位资深雅思主考官。请务必全程使用中文回复，包括所有分析、评语和说明（范文本身保留英文）。你的任务是阅读考官A和B的第一轮分析，以及他们的第二轮辩论，最后给出一份完整的最终报告。
+1. 用中文总结A和B的观点，并判定谁在辩论中更有理。
+2. 给出【详细评分表】（TR、CC、LR、GRA 四项分及总分），并用中文说明每项扣分原因。
+3. 综合修改意见，给出一篇优化后的英文范文，并在范文后附上中文点评说明主要改动要点。
+语气要专业、权威且富有鼓励性，使用Markdown格式。`
+};
+
+
 
 // ─── Chat API ─────────────────────────────────────────────────────────────────
 app.post('/api/chat', requireAuth, async (req, res) => {
