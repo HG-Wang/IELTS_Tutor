@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雅思写作 - 多智能体协作评审系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s step-start infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .agent-card {
+            transition: all 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .debate-bubble {
+            padding: 1rem;
+            border-radius: 1rem;
+            position: relative;
+            max-width: 80%;
+        }
+
+        .debate-bubble.left {
+            background-color: #eff6ff;
+            border-top-left-radius: 0;
+            margin-right: auto;
+        }
+
+        .debate-bubble.right {
+            background-color: #fff7ed;
+            border-top-right-radius: 0;
+            margin-left: auto;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex flex-col">
+
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-lg">
+                <i class="fa-solid fa-people-arrows"></i>
+            </div>
+            <h1 class="text-xl font-bold text-gray-800">IELTS Multi-Agent Reviewer</h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="relative group">
+                <input type="password" id="apiKey" placeholder="在此输入 API Key (OpenAI/OpenRouter)"
+                    class="border border-gray-300 rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-indigo-500 transition-colors">
+                <div
+                    class="absolute right-0 top-full mt-2 w-64 bg-black text-white text-xs p-2 rounded hidden group-hover:block z-50">
+                    推荐使用 OpenRouter 或 OpenAI 格式的 Key。数据直接发送至 API，不经过第三方服务器。
+                </div>
+            </div>
+            <input type="text" id="apiBase" placeholder="API Base URL (可选)" value="https://api.openai.com/v1"
+                class="border border-gray-300 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:border-indigo-500">
+            <input type="text" id="modelName" placeholder="Model (e.g. gpt-4o)" value="gpt-4o-mini"
+                class="border border-gray-300 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-indigo-500">
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+
+        <aside class="w-1/3 bg-white border-r border-gray-200 flex flex-col p-6 overflow-y-auto">
+            <div class="mb-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">雅思写作题目 (Task 2)</label>
+                <textarea id="topic"
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm h-24 resize-none"
+                    placeholder="例如：Some people believe that unpaid community service should be a compulsory part of high school programmes..."></textarea>
+            </div>
+            <div class="mb-4 flex-1 flex flex-col">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">你的文章</label>
+                <textarea id="essay"
+                    class="w-full flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm resize-none font-mono"
+                    placeholder="在此粘贴你的作文..."></textarea>
+            </div>
+            <button onclick="startReview()" id="submitBtn"
+                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-all shadow-md flex justify-center items-center gap-2">
+                <i class="fa-solid fa-gavel"></i> 开始多方评审
+            </button>
+        </aside>
+
+        <main class="flex-1 bg-gray-50 flex flex-col overflow-hidden relative">
+
+            <div id="processArea" class="flex-1 overflow-y-auto p-8 space-y-8 pb-32">
+
+                <div id="welcomeState" class="text-center mt-20 opacity-50">
+                    <i class="fa-solid fa-robot text-6xl mb-4 text-gray-300"></i>
+                    <p class="text-xl">请输入题目和文章，点击开始评审</p>
+                    <p class="text-sm mt-2">系统将召唤 3 位 AI 专家为您服务</p>
+                </div>
+
+                <div id="agentA"
+                    class="agent-card hidden bg-white rounded-xl border-l-4 border-blue-500 shadow-sm p-6 max-w-4xl mx-auto">
+                    <div class="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+                        <div
+                            class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                            A</div>
+                        <div>
+                            <h3 class="font-bold text-gray-800">Grammar Guru (语法严谨派)</h3>
+                            <p class="text-xs text-gray-500">专注于 GRA (语法多样性与准确性) & LR (词汇资源)</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">正在分析...</span>
+                    </div>
+                    <div class="content text-sm text-gray-700 leading-relaxed markdown-body"></div>
+                </div>
+
+                <div id="agentB"
+                    class="agent-card hidden bg-white rounded-xl border-l-4 border-orange-500 shadow-sm p-6 max-w-4xl mx-auto">
+                    <div class="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+                        <div
+                            class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
+                            B</div>
+                        <div>
+                            <h3 class="font-bold text-gray-800">Logic Master (逻辑思维派)</h3>
+                            <p class="text-xs text-gray-500">专注于 TR (任务回应) & CC (连贯与衔接)</p>
+                        </div>
+                        <span class="ml-auto text-xs bg-orange-50 text-orange-600 px-2 py-1 rounded">正在分析...</span>
+                    </div>
+                    <div class="content text-sm text-gray-700 leading-relaxed markdown-body"></div>
+                </div>
+
+                <div id="committeeDiscussion" class="hidden max-w-4xl mx-auto my-8">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+                            <i class="fa-solid fa-comments text-xl"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-700">Round 2: Cross-Examination (Committee Debate)</h3>
+                    </div>
+                    <div id="debateContainer" class="space-y-6"></div>
+                </div>
+
+                <div id="agentC"
+                    class="agent-card hidden bg-white rounded-xl border border-indigo-200 shadow-lg p-0 max-w-4xl mx-auto overflow-hidden ring-4 ring-indigo-50">
+                    <div class="bg-indigo-600 text-white p-4 flex items-center gap-3">
+                        <i class="fa-solid fa-scale-balanced text-xl"></i>
+                        <div>
+                            <h3 class="font-bold text-lg">Chief Examiner (主考官裁决)</h3>
+                            <p class="text-xs opacity-90">综合 A 与 B 的意见，给出最终评分与范文</p>
+                        </div>
+                    </div>
+                    <div class="p-8 content text-gray-800 leading-relaxed markdown-body"></div>
+                </div>
+
+            </div>
+
+            <div id="chatSection"
+                class="bg-white border-t border-gray-200 p-4 absolute bottom-0 w-full transform translate-y-full transition-transform duration-300">
+                <div class="max-w-4xl mx-auto flex gap-3">
+                    <div class="flex-1 relative">
+                        <input type="text" id="chatInput"
+                            class="w-full border border-gray-300 rounded-lg pl-4 pr-12 py-3 focus:outline-none focus:border-indigo-500 shadow-sm"
+                            placeholder="对修改意见有疑问？向主考官提问...">
+                        <button onclick="sendChat()"
+                            class="absolute right-2 top-2 bg-gray-100 hover:bg-gray-200 text-gray-600 p-1.5 rounded-md transition-colors">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // 配置
+        let contextHistory = []; // 保存对话上下文
+
+        // 获取 DOM 元素
+        const topicInput = document.getElementById('topic');
+        const essayInput = document.getElementById('essay');
+        const apiKeyInput = document.getElementById('apiKey');
+        const apiBaseInput = document.getElementById('apiBase');
+        const modelNameInput = document.getElementById('modelName');
+        const processArea = document.getElementById('processArea');
+        const chatSection = document.getElementById('chatSection');
+
+        // Agent 定义 (System Prompts)
+        const PROMPTS = {
+            A_Analysis: `你是一位极其严苛的雅思语法考官（Grammar Guru）。你的任务是只关注【词汇(LR)】和【语法(GRA)】。
+                1. 找出所有语法错误（时态、单复数、从句错误等）。
+                2. 指出中式英语（Chinglish）表达，并提供地道替换。
+                3. 严厉批评词汇重复或低级的问题。
+                不要写总结，直接列出错误点和修正建议。`,
+
+            B_Analysis: `你是一位雅思逻辑思维导师（Logic Master）。你的任务是忽略小语法错误，只关注【任务回应(TR)】和【连贯衔接(CC)】。
+                1. 论点是否切题？有没有跑题？
+                2. 论证是否充分？逻辑链条是否断裂？
+                3. 段落连接词是否自然？
+                如果逻辑不通，请直言不讳。`,
+
+            A_Critique: `你现在进入了委员会辩论环节。针对 Logic Master (逻辑导师) 的反馈，你有什么补充或反对意见？
+                1. 考生的语法错误是否严重到了影响逻辑表达？
+                2. Logic Master 是否漏掉了因语言晦涩导致的逻辑不清？
+                请简短回应（100字以内），开头用 "To Logic Master: ..."`,
+
+            B_Critique: `你现在进入了委员会辩论环节。针对 Grammar Guru (语法考官) 的反馈，你有什么补充或反对意见？
+                1. 语法考官是否过于吹毛求疵，忽略了内容的深度？
+                2. 某些被认为"错误"的表达在特定语境下是否可接受？
+                请简短回应（100字以内），开头用 "To Grammar Guru: ..."`,
+
+            C_Final: `你是一位资深雅思主考官。你的任务是阅读考官A和B的第一轮分析，以及他们的第二轮辩论，最后给出一份最终报告。
+                1. 总结A和B的观点，并判定谁在辩论中更有理。
+                2. 给出【详细评分表】（TR, CC, LR, GRA 四项分及总分）。
+                3. 综合修改意见，给出一篇优化后的范文。
+                语气要专业、权威且富有鼓励性，使用Markdown格式。`
+        };
+
+        // 通用 API 调用函数
+        async function callLLM(systemPrompt, userContent, defaultModel = "gpt-4o-mini") {
+            const apiKey = apiKeyInput.value.trim();
+            const apiBase = apiBaseInput.value.trim();
+            const userModel = modelNameInput.value.trim();
+            const model = userModel || defaultModel;
+
+            if (!apiKey) {
+                // 如果没有Key，为了演示效果，返回模拟数据
+                await new Promise(r => setTimeout(r, 1500)); // 模拟延迟
+                return "[模拟模式] 请输入有效的 API Key 以获取真实 AI 回复。\n\n这里是模拟的反馈内容...";
+            }
+
+            try {
+                const response = await fetch(`${apiBase}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model, // 这里可以使用 gpt-3.5-turbo, gpt-4, 或者 openrouter 上的模型
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: userContent }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                return data.choices[0].message.content;
+            } catch (error) {
+                return `API Error: ${error.message}`;
+            }
+        }
+
+        function addDebateMessage(agent, content) {
+            const container = document.getElementById('debateContainer');
+            const isA = agent === 'A';
+            const div = document.createElement('div');
+            div.className = `debate-bubble ${isA ? 'left' : 'right'} border ${isA ? 'border-blue-100' : 'border-orange-100'}`;
+            div.innerHTML = `
+                <div class="flex items-center gap-2 mb-2 ${isA ? 'text-blue-600' : 'text-orange-600'}">
+                    <i class="fa-solid ${isA ? 'fa-glasses' : 'fa-brain'}"></i>
+                    <span class="font-bold text-sm">${isA ? 'Grammar Guru' : 'Logic Master'}</span>
+                </div>
+                <div class="text-sm text-gray-700 markdown-body">${marked.parse(content)}</div>
+            `;
+            container.appendChild(div);
+        }
+
+        async function startReview() {
+            const topic = topicInput.value;
+            const essay = essayInput.value;
+            if (!essay) { alert("请先输入文章！"); return; }
+
+            // UI Reset
+            document.getElementById('welcomeState').classList.add('hidden');
+            document.getElementById('agentA').classList.remove('hidden');
+            document.getElementById('agentB').classList.remove('hidden');
+            document.getElementById('committeeDiscussion').classList.add('hidden'); // Reset debate section
+            document.getElementById('debateContainer').innerHTML = '';
+            document.getElementById('agentC').classList.add('hidden');
+            chatSection.style.transform = 'translateY(100%)';
+
+            const btn = document.getElementById('submitBtn');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在多轮评审中...';
+            btn.disabled = true;
+
+            // Clear old content
+            document.querySelector('#agentA .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Round 1: Analyzing Grammar & Vocabulary...';
+            document.querySelector('#agentB .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Round 1: Analyzing Logic & Coherence...';
+            document.querySelector('#agentC .content').innerHTML = '';
+
+            const userInput = `Topic: ${topic}\n\nEssay: ${essay}`;
+
+            try {
+                // --- Round 1: Independent Analysis ---
+                const [resA, resB] = await Promise.all([
+                    callLLM(PROMPTS.A_Analysis, userInput),
+                    callLLM(PROMPTS.B_Analysis, userInput)
+                ]);
+
+                document.querySelector('#agentA .content').innerHTML = marked.parse(resA);
+                document.querySelector('#agentB .content').innerHTML = marked.parse(resB);
+
+                // --- Round 2: Cross-Examination (Debate) ---
+                document.getElementById('committeeDiscussion').classList.remove('hidden');
+                addDebateMessage('A', '<i class="fa-solid fa-circle-notch fa-spin"></i> Reviewing Logic Master\'s feedback...');
+                addDebateMessage('B', '<i class="fa-solid fa-circle-notch fa-spin"></i> Reviewing Grammar Guru\'s feedback...');
+                processArea.scrollTo({ top: processArea.scrollHeight, behavior: 'smooth' });
+
+                const critiqueInputA = `
+                    Original Essay: ${essay}
+                    Logic Master's Feedback: ${resB}
+                `;
+                const critiqueInputB = `
+                    Original Essay: ${essay}
+                    Grammar Guru's Feedback: ${resA}
+                `;
+
+                const [critiqueA, critiqueB] = await Promise.all([
+                    callLLM(PROMPTS.A_Critique, critiqueInputA),
+                    callLLM(PROMPTS.B_Critique, critiqueInputB)
+                ]);
+
+                document.getElementById('debateContainer').innerHTML = ''; // Clear loading
+                addDebateMessage('A', critiqueA);
+                addDebateMessage('B', critiqueB);
+
+                // --- Round 3: Final Verdict ---
+                document.getElementById('agentC').classList.remove('hidden');
+                document.querySelector('#agentC .content').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> The Chief Examiner is deliberating...';
+                processArea.scrollTo({ top: processArea.scrollHeight, behavior: 'smooth' });
+
+                const synthesisInput = `
+                    Original Topic: ${topic}
+                    Original Essay: ${essay}
+                    
+                    [Round 1 Analysis]
+                    Grammar Examiner: ${resA}
+                    Logic Examiner: ${resB}
+                    
+                    [Round 2 Debate]
+                    Grammar Examiner's Critique: ${critiqueA}
+                    Logic Examiner's Critique: ${critiqueB}
+                    
+                    Please provide the final verdict, scores, and revised essay.
+                `;
+
+                const resC = await callLLM(PROMPTS.C_Final, synthesisInput, "gpt-4o");
+                document.querySelector('#agentC .content').innerHTML = marked.parse(resC);
+
+                // Finalize
+                contextHistory = [
+                    { role: "system", content: "你是一个雅思写作助手。用户刚刚提交了一篇文章并获得了反馈。请回答用户关于反馈的任何后续问题。" },
+                    { role: "user", content: synthesisInput },
+                    { role: "assistant", content: resC }
+                ];
+                chatSection.style.transform = 'translateY(0)';
+
+            } catch (e) {
+                alert("Error: " + e.message);
+                console.error(e);
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
+                btn.disabled = false;
+                processArea.scrollTo({ top: processArea.scrollHeight, behavior: 'smooth' });
+            }
+        }
+
+        // 聊天功能
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value;
+            if (!msg) return;
+
+            // 在主考官卡片下方追加对话
+            const chatHtml = `
+                <div class="mt-4 border-t pt-4">
+                    <p class="font-bold text-indigo-600 mb-1">Me:</p>
+                    <p class="bg-indigo-50 p-2 rounded text-sm mb-2">${msg}</p>
+                    <p class="font-bold text-gray-800 mb-1">Examiner:</p>
+                    <div class="response-area text-sm text-gray-700 markdown-body"><i class="fa-solid fa-ellipsis fa-fade"></i></div>
+                </div>
+            `;
+            const cContent = document.querySelector('#agentC .content');
+            cContent.innerHTML += chatHtml;
+            input.value = '';
+
+            // 滚动到底部
+            const lastResponseArea = cContent.querySelectorAll('.response-area');
+            const currentArea = lastResponseArea[lastResponseArea.length - 1];
+
+            // 构建请求
+            contextHistory.push({ role: "user", content: msg });
+
+            const apiKey = apiKeyInput.value.trim();
+            const apiBase = apiBaseInput.value.trim();
+
+            const response = await fetch(`${apiBase}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: modelNameInput.value.trim() || "gpt-4o-mini",
+                    messages: contextHistory
+                })
+            });
+            const data = await response.json();
+            const reply = data.choices[0].message.content;
+
+            contextHistory.push({ role: "assistant", content: reply });
+            currentArea.innerHTML = marked.parse(reply);
+        }
+    </script>
+</body>
+
+</html>
