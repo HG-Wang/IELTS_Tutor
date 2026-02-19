@@ -181,16 +181,48 @@
             <!-- Essay Input Area -->
             <div class="border-t border-gray-200 p-3 flex flex-col gap-2" style="max-height: 55vh; overflow-y: auto;">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-500 mb-1">题目 (Task 2)</label>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold text-gray-500">题目 (Task 2)</label>
+                        <button onclick="triggerUpload('topic')" class="text-gray-400 hover:text-indigo-600 text-xs"
+                            title="上传题目图片">
+                            <i class="fa-solid fa-paperclip"></i>
+                        </button>
+                    </div>
                     <textarea id="topic" rows="3"
                         class="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-sm resize-none"
                         placeholder="输入雅思写作题目..."></textarea>
+                    <input type="file" id="topicUpload" accept="image/*" class="hidden"
+                        onchange="handleImageUpload('topic', this)">
+                    <div id="topicPreview"
+                        class="hidden mt-2 relative w-full h-32 bg-gray-100 rounded-lg overflow-hidden group">
+                        <img id="topicImgShow" class="w-full h-full object-contain">
+                        <button onclick="removeImage('topic')"
+                            class="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="flex-1">
-                    <label class="block text-xs font-semibold text-gray-500 mb-1">你的文章</label>
+                <div class="flex-1 overflow-visible">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold text-gray-500">你的文章</label>
+                        <button onclick="triggerUpload('essay')" class="text-gray-400 hover:text-indigo-600 text-xs"
+                            title="上传文章图片">
+                            <i class="fa-solid fa-paperclip"></i>
+                        </button>
+                    </div>
                     <textarea id="essay" rows="8"
                         class="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-sm resize-none font-mono"
                         placeholder="在此粘贴你的作文..."></textarea>
+                    <input type="file" id="essayUpload" accept="image/*" class="hidden"
+                        onchange="handleImageUpload('essay', this)">
+                    <div id="essayPreview"
+                        class="hidden mt-2 relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden group">
+                        <img id="essayImgShow" class="w-full h-full object-contain">
+                        <button onclick="removeImage('essay')"
+                            class="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                    </div>
                 </div>
                 <button onclick="startReview()" id="submitBtn"
                     class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-all shadow-sm flex justify-center items-center gap-2 text-sm">
@@ -328,6 +360,8 @@
         let currentUser = null;
         let currentSessionId = null;
         let contextHistory = [];
+        let currentTopicImg = null;
+        let currentEssayImg = null;
 
         // ── Init ──────────────────────────────────────────────────────────────────
         async function init() {
@@ -391,6 +425,8 @@
             // Reset UI
             document.getElementById('topic').value = '';
             document.getElementById('essay').value = '';
+            removeImage('topic');
+            removeImage('essay');
             document.getElementById('welcomeState').classList.remove('hidden');
             document.getElementById('agentA').classList.add('hidden');
             document.getElementById('agentB').classList.add('hidden');
@@ -411,6 +447,23 @@
             // Fill inputs
             document.getElementById('topic').value = session.topic || '';
             document.getElementById('essay').value = session.essay || '';
+
+            // Restore images
+            if (session.topic_image) {
+                currentTopicImg = session.topic_image;
+                document.getElementById('topicImgShow').src = session.topic_image;
+                document.getElementById('topicPreview').classList.remove('hidden');
+            } else {
+                removeImage('topic');
+            }
+
+            if (session.essay_image) {
+                currentEssayImg = session.essay_image;
+                document.getElementById('essayImgShow').src = session.essay_image;
+                document.getElementById('essayPreview').classList.remove('hidden');
+            } else {
+                removeImage('essay');
+            }
 
             // Restore messages
             const msgs = session.messages || [];
@@ -490,7 +543,7 @@
         async function startReview() {
             const topic = document.getElementById('topic').value.trim();
             const essay = document.getElementById('essay').value.trim();
-            if (!essay) { alert('请先输入文章！'); return; }
+            if (!essay && !currentEssayImg) { alert('请先输入文章或上传图片！'); return; }
 
             // Create session if none
             if (!currentSessionId) {
@@ -521,7 +574,13 @@
                 const res = await fetch('/api/review', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: currentSessionId, topic, essay })
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        topic,
+                        essay,
+                        topic_image: currentTopicImg,
+                        essay_image: currentEssayImg
+                    })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || '提交失败');
@@ -555,15 +614,16 @@
                 async function doPoll() {
                     if (stopped) return;
 
-                    pollCount++;
-                    const stageIdx = Math.min(Math.floor(pollCount / 5), stages.length - 1);
-                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[stageIdx]}`;
+                    // pollCount++; 
+                    // Remove fake progress text, rely on real state or just generic text if no state yet
+                    // const stageIdx = Math.min(Math.floor(pollCount / 5), stages.length - 1);
+                    // btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[stageIdx]}`;
 
                     try {
                         const res = await fetch(`/api/jobs/${jobId}`);
                         const data = await res.json();
 
-                        if (stopped) return; // Another call may have resolved already
+                        if (stopped) return;
 
                         if (data.status === 'done') {
                             stopped = true;
@@ -577,17 +637,36 @@
                             resolve();
                         } else if (data.status === 'not_found') {
                             stopped = true;
-                            // Server restarted — load result from DB
                             await loadSession(currentSessionId);
                             btn.innerHTML = '<i class="fa-solid fa-gavel"></i> 重新评审';
                             btn.disabled = false;
                             resolve();
                         } else {
-                            // Still pending — schedule next poll
+                            // Handle progress updates
+                            if (data.progress) {
+                                if (data.progress.stage >= 1) {
+                                    document.querySelector('#agentA .content').innerHTML = marked.parse(data.progress.resA);
+                                    document.querySelector('#agentB .content').innerHTML = marked.parse(data.progress.resB);
+                                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[1]}`; // '💬 Round 2: ...'
+                                }
+                                if (data.progress.stage >= 2) {
+                                    document.getElementById('committeeDiscussion').classList.remove('hidden');
+                                    // Clear container to avoid duplicates if we poll multiple times in stage 2
+                                    const container = document.getElementById('debateContainer');
+                                    if (container.children.length === 0) {
+                                        addDebateMessage('A', data.progress.critiqueA);
+                                        addDebateMessage('B', data.progress.critiqueB);
+                                    }
+                                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[2]}`; // '⚖️ Round 3: ...'
+                                }
+                            } else {
+                                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${stages[0]}`; // '⏳ Round 1: ...'
+                            }
+
+                            // Continue polling
                             pollingTimer = setTimeout(doPoll, 2000);
                         }
                     } catch (e) {
-                        // Network error — retry after delay
                         if (!stopped) pollingTimer = setTimeout(doPoll, 3000);
                     }
                 }
@@ -606,6 +685,7 @@
             document.querySelector('#agentB .content').innerHTML = marked.parse(resB);
 
             document.getElementById('committeeDiscussion').classList.remove('hidden');
+            document.getElementById('debateContainer').innerHTML = '';
             addDebateMessage('A', critiqueA);
             addDebateMessage('B', critiqueB);
 
@@ -744,6 +824,39 @@
         async function logout() {
             await fetch('/api/logout', { method: 'POST' });
             window.location.href = '/';
+        }
+
+        // ─── Image Upload Helpers ────────────────────────────────────────────────
+        function triggerUpload(type) {
+            document.getElementById(type + 'Upload').click();
+        }
+
+        function handleImageUpload(type, input) {
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const base64 = e.target.result;
+                    if (type === 'topic') {
+                        currentTopicImg = base64;
+                        document.getElementById('topicImgShow').src = base64;
+                        document.getElementById('topicPreview').classList.remove('hidden');
+                    } else {
+                        currentEssayImg = base64;
+                        document.getElementById('essayImgShow').src = base64;
+                        document.getElementById('essayPreview').classList.remove('hidden');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeImage(type) {
+            document.getElementById(type + 'Upload').value = '';
+            document.getElementById(type + 'Preview').classList.add('hidden');
+            document.getElementById(type + 'ImgShow').src = '';
+            if (type === 'topic') currentTopicImg = null;
+            else currentEssayImg = null;
         }
 
         init();

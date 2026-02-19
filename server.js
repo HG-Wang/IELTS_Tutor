@@ -38,6 +38,8 @@ db.exec(`
     title TEXT DEFAULT '新批改',
     topic TEXT DEFAULT '',
     essay TEXT DEFAULT '',
+    topic_image TEXT DEFAULT '',
+    essay_image TEXT DEFAULT '',
     status TEXT DEFAULT 'pending',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
@@ -61,6 +63,24 @@ db.exec(`
   );
 `);
 
+// ─── Migration: Add image columns if missing ──────────────────────────────────
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(sessions)").all();
+  const hasTopicImg = tableInfo.some(c => c.name === 'topic_image');
+  const hasEssayImg = tableInfo.some(c => c.name === 'essay_image');
+
+  if (!hasTopicImg) {
+    db.prepare("ALTER TABLE sessions ADD COLUMN topic_image TEXT DEFAULT ''").run();
+    console.log('✅ Added topic_image column to sessions table');
+  }
+  if (!hasEssayImg) {
+    db.prepare("ALTER TABLE sessions ADD COLUMN essay_image TEXT DEFAULT ''").run();
+    console.log('✅ Added essay_image column to sessions table');
+  }
+} catch (err) {
+  console.error('Migration failed:', err);
+}
+
 // Create default admin if not exists
 const adminExists = db.prepare("SELECT id FROM users WHERE is_admin = 1").get();
 if (!adminExists) {
@@ -72,7 +92,7 @@ if (!adminExists) {
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -316,10 +336,19 @@ async function callAI(systemPrompt, userContent, cfg) {
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
+          if (res.statusCode >= 400) {
+            console.error('AI Request Failed:', res.statusCode, res.statusMessage);
+            console.error('API Config:', { apiBase, model });
+            console.error('Request Body (first 500 chars):', body.slice(0, 500));
+            console.error('Response Body:', data);
+          }
+
           const json = JSON.parse(data);
           if (json.error) return reject(new Error(json.error.message || JSON.stringify(json.error)));
           resolve(json.choices[0].message.content);
         } catch (e) {
+          console.error('AI Response Error Dump:', data.slice(0, 500)); // Log the HTML error
+          console.error('Request Body Size:', Buffer.byteLength(body, 'utf8')); // Log request size
           reject(new Error('AI 响应解析失败: ' + data.slice(0, 200)));
         }
       });
@@ -328,6 +357,24 @@ async function callAI(systemPrompt, userContent, cfg) {
     req.write(body);
     req.end();
   });
+}
+
+// Helper to construct multimodal message correctly
+function buildMultimodalMessage(text, ...images) {
+  // If no images, return simple text
+  const validImages = images.filter(img => img && img.startsWith('data:image'));
+  if (validImages.length === 0) return text;
+
+  // Images placed BEFORE text (per API spec)
+  const content = [];
+  for (const imgBase64 of validImages) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: imgBase64, detail: 'high' }
+    });
+  }
+  content.push({ type: 'text', text: text });
+  return content;
 }
 
 // ─── Background Job Queue ─────────────────────────────────────────────────────
@@ -343,22 +390,35 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-async function runReviewJob(jobId, userId, session_id, topic, essay) {
+async function runReviewJob(jobId, userId, session_id, topic, essay, topicImg, essayImg) {
   const cfg = getAIConfig();
-  const userInput = `Topic: ${topic || '(未提供题目)'}\n\nEssay: ${essay}`;
+  const userInputText = `Topic: ${topic || '(未提供题目)'}\n\nEssay: ${essay}`;
+
+  // Construct multimodal input for analysis
+  const userContent = buildMultimodalMessage(userInputText, topicImg, essayImg);
 
   try {
     // Round 1: Independent Analysis
     const [resA, resB] = await Promise.all([
-      callAI(PROMPTS.A_Analysis, userInput, cfg),
-      callAI(PROMPTS.B_Analysis, userInput, cfg)
+      callAI(PROMPTS.A_Analysis, userContent, cfg),
+      callAI(PROMPTS.B_Analysis, userContent, cfg)
     ]);
+
+    // Update progress: Round 1 done
+    if (jobs.has(jobId)) {
+      jobs.get(jobId).progress = { stage: 1, resA, resB };
+    }
 
     // Round 2: Cross-Examination
     const [critiqueA, critiqueB] = await Promise.all([
       callAI(PROMPTS.A_Critique, `Original Essay: ${essay}\nLogic Master's Feedback: ${resB}`, cfg),
       callAI(PROMPTS.B_Critique, `Original Essay: ${essay}\nGrammar Guru's Feedback: ${resA}`, cfg)
     ]);
+
+    // Update progress: Round 2 done
+    if (jobs.has(jobId)) {
+      jobs.get(jobId).progress = { stage: 2, resA, resB, critiqueA, critiqueB };
+    }
 
     // Round 3: Final Verdict
     const synthesisInput = `
@@ -376,7 +436,7 @@ Logic Examiner's Critique: ${critiqueB}
 Please provide the final verdict, scores, and revised essay.
     `.trim();
 
-    const resC = await callAI(PROMPTS.C_Final, synthesisInput, cfg);
+    const resC = await callAI(PROMPTS.C_Final, synthesisInput, cfg); // Debate summary doesn't need images again, text is enough context
 
     // Save to DB (atomic transaction)
     const saveMsg = db.prepare("INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)");
@@ -392,8 +452,8 @@ Please provide the final verdict, scores, and revised essay.
 
     // Update session info
     const title = (topic || essay).slice(0, 40) + '...';
-    db.prepare("UPDATE sessions SET topic = ?, essay = ?, title = ?, status = 'done', updated_at = datetime('now') WHERE id = ?")
-      .run(topic || '', essay, title, session_id);
+    db.prepare("UPDATE sessions SET topic = ?, essay = ?, topic_image = ?, essay_image = ?, title = ?, status = 'done', updated_at = datetime('now') WHERE id = ?")
+      .run(topic || '', essay, topicImg || '', essayImg || '', title, session_id);
 
     // Increment used_reviews (only for non-admins)
     const user = db.prepare("SELECT is_admin FROM users WHERE id = ?").get(userId);
@@ -418,8 +478,8 @@ Please provide the final verdict, scores, and revised essay.
 }
 
 app.post('/api/review', requireAuth, (req, res) => {
-  const { session_id, topic, essay } = req.body;
-  if (!essay) return res.status(400).json({ error: '请提供作文内容' });
+  const { session_id, topic, essay, topic_image, essay_image } = req.body;
+  if (!essay && !essay_image) return res.status(400).json({ error: '请至少提供作文内容或图片' });
 
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
 
@@ -439,16 +499,16 @@ app.post('/api/review', requireAuth, (req, res) => {
   const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(session_id, user.id);
   if (!session) return res.status(404).json({ error: '会话不存在' });
 
-  // Mark session as processing
-  db.prepare("UPDATE sessions SET topic = ?, essay = ?, status = 'processing', updated_at = datetime('now') WHERE id = ?")
-    .run(topic || '', essay, session_id);
+  // Mark session as processing and save images immediately
+  db.prepare("UPDATE sessions SET topic = ?, essay = ?, topic_image = ?, essay_image = ?, status = 'processing', updated_at = datetime('now') WHERE id = ?")
+    .run(topic || '', essay || '', topic_image || '', essay_image || '', session_id);
 
   // Create job and start background processing
   const jobId = uuidv4();
-  jobs.set(jobId, { status: 'pending', userId: user.id, sessionId: session_id, result: null, error: null, createdAt: Date.now() });
+  jobs.set(jobId, { status: 'pending', userId: user.id, sessionId: session_id, result: null, progress: null, error: null, createdAt: Date.now() });
 
   // Fire and forget — runs independently of this HTTP request
-  runReviewJob(jobId, user.id, session_id, topic, essay);
+  runReviewJob(jobId, user.id, session_id, topic, essay, topic_image, essay_image);
 
   // Return immediately with job ID
   res.json({ job_id: jobId, session_id });
@@ -474,7 +534,7 @@ app.get('/api/jobs/:id', requireAuth, (req, res) => {
   if (job.status === 'error') {
     return res.json({ status: 'error', error: job.error });
   }
-  res.json({ status: 'pending' });
+  res.json({ status: 'pending', progress: job.progress });
 });
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
