@@ -118,6 +118,72 @@
             border-top: 1px solid #e2e8f0;
             margin: 1em 0;
         }
+
+        /* 打印样式 (Feature B: 导出评审报告) */
+        @media print {
+            body {
+                background: white;
+                height: auto;
+                overflow: visible !important;
+            }
+
+            /* 隐藏侧边栏, 顶部导航条, 聊天栏, 模态框等不相关元素 */
+            aside,
+            header,
+            #chatSection,
+            #profileModal,
+            #welcomeState,
+            #submitBtn {
+                display: none !important;
+            }
+
+            /* 主容器占满全屏, 消除原有边距和边界 */
+            .flex-1 {
+                flex: none;
+                width: 100%;
+                overflow: visible !important;
+            }
+
+            main {
+                display: block !important;
+                background: white;
+            }
+
+            #processArea {
+                height: auto;
+                overflow: visible !important;
+                padding: 0;
+                margin: 0;
+            }
+
+            /* 优化卡片样式，避免分页被截断 */
+            .agent-card {
+                box-shadow: none !important;
+                border: 1px solid #e2e8f0 !important;
+                margin-bottom: 2rem !important;
+                page-break-inside: avoid;
+            }
+
+            #committeeDiscussion {
+                page-break-inside: avoid;
+                margin-bottom: 2rem !important;
+            }
+
+            .debate-bubble {
+                page-break-inside: avoid;
+                border: 1px solid #e2e8f0 !important;
+            }
+
+            /* 隐藏页面上原有的滚动条修饰 */
+            * {
+                scrollbar-width: none;
+            }
+
+            /* 打印按钮自然要隐藏 */
+            .no-print {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 
@@ -213,6 +279,7 @@
                     <textarea id="essay" rows="8"
                         class="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-sm resize-none font-mono"
                         placeholder="在此粘贴你的作文..."></textarea>
+                    <div id="wordCountDisplay" class="text-xs text-gray-400 mt-1 text-right">字数: 0 (建议不少于250字)</div>
                     <input type="file" id="essayUpload" accept="image/*" class="hidden"
                         onchange="handleImageUpload('essay', this)">
                     <div id="essayPreview"
@@ -294,6 +361,10 @@
                             <h3 class="font-bold text-lg">Chief Examiner (主考官裁决)</h3>
                             <p class="text-xs opacity-90">综合 A 与 B 的意见，给出最终评分与范文</p>
                         </div>
+                        <button onclick="window.print()"
+                            class="ml-auto bg-white text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors no-print flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-file-pdf"></i> 导出报告
+                        </button>
                     </div>
                     <div class="p-6 content text-gray-800 leading-relaxed markdown-body"></div>
                 </div>
@@ -425,6 +496,8 @@
             // Reset UI
             document.getElementById('topic').value = '';
             document.getElementById('essay').value = '';
+            document.getElementById('wordCountDisplay').className = 'text-xs text-gray-400 mt-1 text-right';
+            document.getElementById('wordCountDisplay').textContent = '字数: 0 (建议不少于250字)';
             removeImage('topic');
             removeImage('essay');
             document.getElementById('welcomeState').classList.remove('hidden');
@@ -542,8 +615,18 @@
 
         async function startReview() {
             const topic = document.getElementById('topic').value.trim();
-            const essay = document.getElementById('essay').value.trim();
+            const essayText = document.getElementById('essay').value.trim();
+            const essay = essayText;
             if (!essay && !currentEssayImg) { alert('请先输入文章或上传图片！'); return; }
+
+            if (essayText && !currentEssayImg) {
+                const wordCount = essayText.split(/\s+/).length;
+                if (wordCount < 10) {
+                    if (!confirm(`当前输入仅 ${wordCount} 个词，字数明显过少。确定要消耗一次批改机会吗？`)) {
+                        return;
+                    }
+                }
+            }
 
             // Create session if none
             if (!currentSessionId) {
@@ -730,6 +813,24 @@
       `;
             container.appendChild(div);
         }
+
+        // ── Word Count ────────────────────────────────────────────────────────────
+        document.getElementById('essay').addEventListener('input', function () {
+            const text = this.value.trim();
+            let count = 0;
+            if (text) {
+                // Count words (splitting by whitespace), handling English mainly, but simple enough for mixed text
+                count = text.split(/\s+/).length;
+            }
+            const display = document.getElementById('wordCountDisplay');
+            if (count < 250) {
+                display.className = 'text-xs text-orange-500 mt-1 text-right';
+                display.textContent = `字数: ${count} (建议不少于250字)`;
+            } else {
+                display.className = 'text-xs text-green-600 mt-1 text-right font-medium';
+                display.textContent = `字数: ${count} (达标)`;
+            }
+        });
 
         // ── Chat ──────────────────────────────────────────────────────────────────
         async function sendChat() {
